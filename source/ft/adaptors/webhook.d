@@ -2,10 +2,7 @@ module ft.adaptors.webhook;
 import ft.adaptor;
 import ft.data;
 
-import vibe.http.server;
-import vibe.http.router;
-import vibe.data.json;
-import vibe.core.core;
+import lighttp;
 import core.thread;
 import core.sync.mutex;
 import core.time;
@@ -74,7 +71,9 @@ public:
         this.stop();
     }
 
-    void recvData(HTTPServerRequest req, HTTPServerResponse res) {
+    void recvData(ServerRequest req, ServerResponse res) {
+        res.status = StatusCodes.badRequest;
+        /*
         Json json_data;
         auto e_result = collectException!Exception(req.json, json_data);
         enforceHTTP(
@@ -97,25 +96,22 @@ public:
 
         tsdata.set(data);
         res.writeVoidBody();
+        */
     }
 
     void receiveThread() {
         isCloseRequested = false;
         tsdata = WebHookThreadSafeData(new Mutex());
 
-        HTTPListener listener;
-        HTTPServerSettings settings =  new HTTPServerSettings();
-        settings.port = port;
-        settings.bindAddresses = [bind];
+        Server server = new Server();
+        server.host(bind, port);
 
-        auto router = new URLRouter;
-        router.post("/blendshapes", &this.recvData);
+        server.router.add(Post("blendshapes"), &this.recvData);
+        // stops when isCloseRequested true
+        bool cond(){return !isCloseRequested;}
+        server.run(&cond);
 
-        listener = listenHTTP(settings, router);
-        while (!isCloseRequested) {
-            sleep(dur!"seconds"(1));
-        }
-        listener.stopListening();
+        destroy(server);
     }
 
     override
